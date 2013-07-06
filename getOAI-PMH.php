@@ -35,18 +35,21 @@ $use_errors = libxml_use_internal_errors(true);
 //Setup Source Information
 //$sourceName = 'HarvardDataVerse';
 //$sourceName = 'Dryad';
-//$sourceName = 'arXiv';
-$sourceName = 'LOC';
+$sourceName = 'arXiv';
+//$sourceName = 'LOC';
 
 //$oaiURL = 'http://dvn.iq.harvard.edu/dvn/OAIHandler';
 //$oaiURL = 'http://www.datadryad.org/oai/request';
-//$oaiURL = 'http://export.arxiv.org/oai2/request';
-$oaiURL = 'http://memory.loc.gov/cgi-bin/oai2_0';
+$oaiURL = 'http://export.arxiv.org/oai2/request';
+//$oaiURL = 'http://memory.loc.gov/cgi-bin/oai2_0';
 
 //To be nice to OAI-PMH sites set a wait time for each request (e.g. arXiv suggests 20 seconds)
 $sleepTime = 20;
 
-//Check on and identify OAI-PMH services at target site
+//Set date to to allow updates
+$dateTag = date("Y-m-d");
+
+//Check on and identify of OAI-PMH services at target site
 $url = $oaiURL . "?verb=Identify";
 $xmlObj = simplexml_load_file($url);
 	
@@ -59,6 +62,32 @@ if (!$xmlObj) {
 //Collect repository information from returned XML
 $repoName = $xmlObj->Identify->repositoryName;
 echo "[STATUS] Contacted archive: $repoName \n";
+
+//Setup archive directory
+$cwd = getcwd();
+
+$directory = $cwd . '/' . preg_replace('/\s+/', '', $repoName);
+
+if (!mkdir($directory, 0755, true)) {
+    echo "[ERROR] Failed to create repository folder $directory \n";
+    exit (1);
+}
+
+//Setup file for repository information
+$infoFile = $directory . '/' . preg_replace('/\s+/', '', $sourceName) . '_' . 'info' . '.xml';
+
+// Create or revert (empty) file for new run
+$fp = fopen($infoFile, 'w+');
+fclose($fp);
+
+//Output repository information to status file
+file_put_contents($infoFile, "<?xml version=\"1.0\"?>\n", FILE_APPEND | LOCK_EX);
+file_put_contents($infoFile, "<OAI-PMH>\n", FILE_APPEND | LOCK_EX);
+
+file_put_contents($infoFile, $xmlObj->Identify->asXML(), FILE_APPEND | LOCK_EX);
+file_put_contents($infoFile, "\n", FILE_APPEND | LOCK_EX);
+
+file_put_contents($infoFile, "</OAI-PMH>\n", FILE_APPEND | LOCK_EX);
 
 //Check that oai_dc is supported by the OAI-PMH services at target site
 $metaFormat = 'oai_dc';
@@ -111,17 +140,7 @@ foreach ($xmlNode->set as $setNode) {
 		
 }
 
-
 //Setup master file (i.e. file to hold records from all sets) for writing
-$dateTag = date("Y-m-d");
-
-//Setup archive directory
-$directory = "./" . preg_replace('/\s+/', '', $repoName);
-if (!mkdir($directory, 0755, true)) {
-    echo "[ERROR] Failed to create repository folder \n";
-    exit (1);
-}
-
 $masterFile = $directory . '/' . preg_replace('/\s+/', '', $sourceName) . '_' . 'complete' . '.xml';
 // Create or revert (empty) file for new process
 $fp = fopen($masterFile, 'w+');
